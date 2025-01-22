@@ -10,7 +10,7 @@ except Exception as e:
     tello.end()
     exit(1)
 
-print(tello.get_battery() "%")
+print(tello.get_battery(), "%")
 
 tello.takeoff()
 

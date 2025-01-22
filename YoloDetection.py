@@ -2,29 +2,39 @@ import cv2
 import threading
 from djitellopy import Tello
 from ultralytics import YOLO
-import time
 
+# Initialisation du drone
 tello = Tello()
 tello.connect()
 tello.streamon()
 frame_read = tello.get_frame_read()
 
+# Chargement du modèle YOLO
 model = YOLO("yolov8n.pt")
 
+# Fonction de vol avec obstacles
 def fly_sequence():
     print("Tentative de décollage...")
     print("Battery:", tello.get_battery())
     tello.takeoff()
-    time.sleep(2)
-    tello.move_back(30)
-    time.sleep(2)
-    tello.rotate_clockwise(360)
-    time.sleep(5)
-    tello.move_down(20)
-    time.sleep(2)
-    tello.move_back(30)
-    time.sleep(2)
-    tello.land()
+
+    while True:
+        img = frame_read.frame
+        if img is None:
+            continue
+
+        # Détection avec YOLO
+        results = model.predict(source=img, save=False, conf=0.5)
+
+        for result in results[0].boxes.data:
+            class_id = int(result[5])  # ID de la classe
+            if model.names[class_id] == 'person':  # Si un humain est détecté
+                print("Humain détecté.")
+                print("Do a flip.")
+                tello.flip("r")
+            
+        tello.land()
+        break
 
 def display_video():
     while True:
