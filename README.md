@@ -12,12 +12,12 @@ Drone Ryze Tello EDU
 
 ## A installer
 
-*python3
-*cv2
-*threading
-*djitellopy
-*ultralytics
-*time
+* python3
+* cv2
+* threading
+* djitellopy
+* ultralytics
+* time
 
 ### Install python
 
