@@ -1,0 +1,9 @@
+{
+    "domain": "video_stream_card",
+    "name": "Video Stream Card",
+    "documentation": "https://github.com/votre-repo/video_stream_card",
+    "dependencies": [],
+    "codeowners": ["@votre-username"],
+    "requirements": [],
+    "version": "1.0.0"
+}
