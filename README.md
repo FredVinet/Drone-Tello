@@ -1,19 +1,26 @@
-# Drone-Tello-Edu
+# Drone extravaganza
 
-Objectifs principaux:
+## Objectifs principaux:
 
-Avoir l'image dans home assistant;
-Faire un programme de déplacement
+    Afficher le stream vidéo du drone
+    Faire de la reconnaissance avec YOLO
+    Réagir aux éléments reconnus
 
-Stretch goal:
+## Matériel :
+    Drone Ryze Tello EDU
 
-Reconnaissance
+## Libs :
+    python3
+    cv2
+    threading
+    djitellopy
+    ultralytics
+    time
+## Install python
 
-intégrer la caméra à homme assistant :
-Paramètre / Appareil et services / intégration / udp://192.168.10.1:11111
+'''console, aptitude install python3'''
 
+## Liens utiles :
+    https://www.ryzerobotics.com/fr/tello-edu/downloads 
+    https://djitellopy.readthedocs.io/en/latest/tello/
 
-
-soft pour la vidéo
-module uid
-intégrer la vidéo dans home assistant
