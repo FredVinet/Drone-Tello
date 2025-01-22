@@ -2,23 +2,26 @@
 
 ## Objectifs principaux:
 
-    Afficher le stream vidéo du drone
-    Faire de la reconnaissance avec YOLO
-    Réagir aux éléments reconnus
+Afficher le stream vidéo du drone
+Faire de la reconnaissance avec YOLO
+Réagir aux éléments reconnus
 
 ## Matériel :
-    Drone Ryze Tello EDU
 
-## Libs :
-    python3
-    cv2
-    threading
-    djitellopy
-    ultralytics
-    time
-## Install python
+Drone Ryze Tello EDU
 
-'''console, aptitude install python3'''
+## A installer :
+
+python3
+cv2
+threading
+djitellopy
+ultralytics
+time
+
+### Install python
+
+    aptitude install python3
 
 ## Liens utiles :
     https://www.ryzerobotics.com/fr/tello-edu/downloads 
