@@ -44,9 +44,9 @@ See .py files for exemples
 
 ## Authors
 
-**Malo GUEGUEN**
+**Malo GUEGUEN**  
 **Johan MONS**  
-**Lucas RAOUL**
+**Lucas RAOUL**  
 **Fred VINET**  
 
 ## Licence
