@@ -1,3 +1,13 @@
+# MADE BY : Lucas Raoul, Frederic Vinet, Johan Mons, Malo Gueguen
+# What is it doing : 
+#    This code has been made for a DJI Tello Edu.
+#    It uses the libraries: 
+#           "OpenCv" to capture the video feed from the drone
+#           "Threading" to execute multiple tasks simultaneously
+#           "Djitellopy" to connect the Python code to the drone 
+#           "Ultralytics" for the YOLO algorithms, which use AI to detect objects with the camera
+#           "Flask" to open the video feed on a web interface
+
 import cv2 
 import threading
 import time
@@ -5,124 +15,123 @@ from djitellopy import Tello
 from ultralytics import YOLO
 from flask import Flask, Response
 
-# --- INITIALISATION DU DRONE & YOLO ---
+# --- Initialize Tello Drone & YOLO ---
 
-# Initialisation de l'objet Tello pour contrôler le drone
+# Initialize Tello to control the drone
 tello = Tello()
-tello.connect()  # Connexion au drone
-print(f"Batterie: {tello.get_battery()}%")  # Affichage du niveau de batterie
+tello.connect()  # Connect to the drone
+print(f"Battery: {tello.get_battery()}%")  # Display the battery percentage
 
-# Activation de la réception du flux vidéo du drone
+# Activate the video feed from the drone's camera
 tello.streamon()
 frame_read = tello.get_frame_read()
 
-# Activation de la détection des pads (pour Tello Edu)
+# Activate the detection of mission pads (specific to DJI Tello Edu)
 tello.enable_mission_pads()
-tello.set_mission_pad_detection_direction(0)  # Détection vers le bas
+tello.set_mission_pad_detection_direction(0)  # Set detection direction (0: downward sensor, 1: front camera)
 
-# Chargement du modèle YOLO pour la détection d'objets
+# Load the YOLO model for object detection
 model = YOLO("yolov8n.pt")
 
-# --- FONCTIONS DE VOL & DÉTECTION ---
+# --- Flight and Detection Functions ---
 
 def fly_sequence():
     """
-    Gère la séquence de vol du drone et utilise YOLO pour détecter une personne.
-    Si une personne est détectée, effectue un flip à droite et atterrit.
+    Handle the flight sequence of the drone and use YOLO to detect a person.
+    If a person is detected, the drone performs a flip to the right and lands.
     """
-    print("[Fly Thread] Décollage...")
-    tello.takeoff()  # Décollage du drone
+    print("[Fly Thread] Taking off...")
+    tello.takeoff()  # Drone takes off
 
-    # 1) Avancer jusqu'à détecter le pad #4
+    # 1) Move forward until pad #4 is detected
     while True:
-        pad_id = tello.get_mission_pad_id()  # Récupère l'ID du pad détecté
-        print("Pad ID =", pad_id)  # Affichage pour le débogage
-        if pad_id == 4:
-            print("[Fly Thread] Pad #4 détecté. Arrêt de la progression.")
+        pad_id = tello.get_mission_pad_id()  # Get the ID of the detected mission pad
+        print("Pad ID =", pad_id)  # Display the pad ID for debugging
+        if pad_id == 4:  # If pad ID is 4, proceed
+            print("[Fly Thread] Pad #4 detected.")
             break
         else:
-            print("[Fly Thread] Pas encore de pad #4. J'avance...")
-            tello.move_forward(50)  # Avance de 50 cm
-            time.sleep(1)  # Pause d'une seconde
+            print("[Fly Thread] Waiting for Pad #4.")
+            tello.move_forward(50)  # Move forward 50 cm
+            time.sleep(1)  # Pause for 1 second
 
-    # 2) Tourner de 90° dans le sens horaire
-    print("[Fly Thread] Rotation de 90°...")
+    # 2) Rotate 90° clockwise
+    print("[Fly Thread] 90° rotation...")
     tello.rotate_clockwise(90)
 
-    # 3) Boucle pour détecter une personne
+    # 3) Detect a person using YOLO
     person_detected = False
     while not person_detected:
-        img = frame_read.frame  # Récupère le cadre actuel du flux vidéo
+        img = frame_read.frame  # Retrieve the current frame from the video feed
         if img is None:
-            continue  # Si aucun cadre n'est disponible, continue
+            continue  # Skip if no frame is available
 
-        # Utilise YOLO pour prédire les objets dans l'image
+        # Perform object detection with YOLO
         results = model.predict(source=img, save=False, conf=0.5)
-        
-        # Parcourt les résultats pour vérifier la présence d'une personne
+
+        # Check detection results to see if a person is in the frame
         for result in results[0].boxes.data:
-            class_id = int(result[5])  # Indice de classe détectée
-            class_name = model.names.get(class_id, "Unknown")  # Nom de la classe
+            class_id = int(result[5])
+            class_name = model.names.get(class_id, "Unknown")
             if class_name == 'person':
                 person_detected = True
-                print("[Fly Thread] Personne détectée ! Flip latéral...")
-                tello.flip("r")  # Effectue un flip vers la droite
-                break  # Sort de la boucle une fois la personne détectée
+                print("[Fly Thread] Person detected!")
+                tello.flip("r")  # Perform a flip to the right
+                break
 
-    # 4) Atterrissage du drone
-    print("[Fly Thread] Atterrissage...")
+    # 4) Land the drone
+    print("[Fly Thread] Landing...")
     tello.land()
 
-# --- SERVEUR FLASK POUR LE FLUX VIDÉO ---
+# --- Flask Server for the Video Feed ---
 
-app = Flask(__name__)  # Initialisation de l'application Flask
+app = Flask(__name__)  # Initialize the Flask application
 
 def gen_frames():
     """
-    Génère un flux vidéo au format MJPEG avec les annotations de détection YOLO.
+    Generate an MJPEG video feed with YOLO detections and annotations.
     """
     while True:
-        frame = frame_read.frame  # Récupère le cadre actuel du flux vidéo
+        frame = frame_read.frame
         if frame is None:
-            continue  # Si aucun cadre n'est disponible, continue
+            continue
 
-        # Détection d'objets avec YOLO pour annoter le cadre
+        # Perform object detection with YOLO and annotate the frame
         results = model.predict(source=frame, save=False, conf=0.5)
-        annotated_frame = results[0].plot()  # Dessine les bounding boxes sur l'image (format BGR)
+        annotated_frame = results[0].plot()  # Draw bounding boxes on the image (BGR format)
 
-        # Conversion de BGR en RGB pour un affichage correct dans le navigateur
+        # Convert BGR to RGB for better visualization in the web interface
         annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
 
-        # Encodage de l'image annotée en JPEG
+        # Encode the image as a JPEG
         ret, buffer = cv2.imencode('.jpg', annotated_frame)
         if not ret:
-            continue  # Si l'encodage échoue, continue
+            continue
 
-        # Construction du flux MJPEG
+        # Construct the MJPEG feed
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n'
                + buffer.tobytes()
                + b'\r\n')
 
-        time.sleep(0.03)  # Pause pour limiter le débit du flux
+        time.sleep(0.03)  # Pause to limit the feed flow
 
 @app.route('/video_feed')
 def video_feed():
     """
-    Route qui expose le flux vidéo au format MJPEG annoté.
+    Route that exposes the annotated video feed in MJPEG format.
     """
-    return Response(gen_frames(),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/')
 def index():
     """
-    Page HTML principale affichant le flux vidéo avec un style simple.
+    Main HTML page displaying the video feed with simple styling.
     """
     return '''
     <html>
     <head>
-        <title>Flux vidéo Tello</title>
+        <title>Tello Video Feed</title>
         <style>
             body {
                 background-color: #f0f0f0;
@@ -148,7 +157,7 @@ def index():
         </style>
     </head>
     <body>
-        <h1>Flux vidéo Tello (YOLO)</h1>
+        <h1>Tello Video Feed (YOLO)</h1>
         <div class="video-container">
             <img src="/video_feed" width="640" height="480" />
         </div>
@@ -156,24 +165,24 @@ def index():
     </html>
     '''
 
-# --- LANCEMENT DE L'APPLICATION ---
+# --- Launch the Application ---
 
 if __name__ == '__main__':
     try:
-        # Thread 1 : Gestion de la séquence de vol (fly_sequence)
+        # Thread 1: Manage the flight sequence (fly_sequence)
         fly_thread = threading.Thread(target=fly_sequence, daemon=True)
         fly_thread.start()
 
-        # Thread principal : Lancement du serveur Flask
+        # Main thread: Launch the Flask server
         app.run(host='0.0.0.0', port=5000, debug=False)
 
     finally:
-        # Arrêt propre du flux vidéo
+        # Properly stop the video feed
         tello.streamoff()
-        # Tentative d'atterrissage si le drone est encore en vol
+        # Attempt to land the drone if still in flight
         try:
             tello.land()
         except:
             pass
-        # Libération des ressources du drone
+        # Release the drone's resources
         tello.end()
