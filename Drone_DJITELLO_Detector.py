@@ -45,19 +45,31 @@ def fly_sequence():
 
     # 1) Move forward until pad #4 is detected
     while True:
-        pad_id = tello.get_mission_pad_id()  # Get the ID of the detected mission pad
-        print("Pad ID =", pad_id)  # Display the pad ID for debugging
-        if pad_id == 4:  # If pad ID is 4, proceed
+        pad_id = tello.get_mission_pad_id()
+        if pad_id == 4:  # Pad #4 detected
             print("[Fly Thread] Pad #4 detected.")
+            # 2) Rotate 90° clockwise
+            print("[Fly Thread] 90° rotation...")
+            tello.rotate_clockwise(90)
             break
+        elif pad_id == 8:  # Pad #4 detected
+            print("[Fly Thread] Pad #8 detected.")
+            print("[Fly Thread] 180° rotation...")
+            tello.rotate_clockwise(180)
+            time.sleep(1)
+            print("[Fly Thread] Moving 50 cm up...")
+            tello.move_up(50)
+            time.sleep(1)
+            break
+        elif pad_id == -1:
+            print("[Fly Thread] No pad detected. Moving forward...")
         else:
-            print("[Fly Thread] Waiting for Pad #4.")
-            tello.move_forward(50)  # Move forward 50 cm
-            time.sleep(1)  # Pause for 1 second
+            print(f"[Fly Thread] Detected pad ID: {pad_id}. Continuing search...")
 
-    # 2) Rotate 90° clockwise
-    print("[Fly Thread] 90° rotation...")
-    tello.rotate_clockwise(90)
+        tello.move_forward(50)  # Move forward
+        time.sleep(1)  # Pause for 1 second
+
+    
 
     # 3) Detect a person using YOLO
     person_detected = False

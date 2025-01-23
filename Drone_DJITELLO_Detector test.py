@@ -1,32 +1,43 @@
-from djitellopy import Tello
-import cv2
-import time
-from flask import Flask, Response
-from ultralytics import YOLO
-import os
+# MADE BY : Lucas Raoul, Frederic Vinet, Johan Mons, Malo Gueguen
+# What is it doing : 
+#    This code has been made for a DJI Tello Edu.
+#    It uses the libraries: 
+#           "OpenCv" to capture the video feed from the drone
+#           "Threading" to execute multiple tasks simultaneously
+#           "Djitellopy" to connect the Python code to the drone 
+#           "Ultralytics" for the YOLO algorithms, which use AI to detect objects with the camera
+#           "Flask" to open the video feed on a web interface
+
+import cv2 
 import threading
+import time
+import os
+from djitellopy import Tello
+from ultralytics import YOLO
+from flask import Flask, Response
 from datetime import datetime
 
-# --- INITIALISATION DU DRONE & YOLO ---
+# --- Initialize Tello Drone & YOLO ---
 
-# Définir le répertoire où les photos seront sauvegardées
 photos_dir = "captured_photos"
 if not os.path.exists(photos_dir):
     os.makedirs(photos_dir)
 
-# Initialisation de l'objet Tello pour contrôler le drone
+# Initialize Tello to control the drone
 tello = Tello()
-tello.connect()  # Connexion au drone
-print(f"Batterie: {tello.get_battery()}%")  # Affichage du niveau de batterie
+tello.connect()  # Connect to the drone
+print(f"Battery: {tello.get_battery()}%")  # Display the battery percentage
 
-# Activation de la réception du flux vidéo du drone
+# Activate the video feed from the drone's camera
 tello.streamon()
 frame_read = tello.get_frame_read()
 
-# Chargement du modèle YOLO pour la détection d'objets
-model = YOLO("yolov8n.pt")  # Assurez-vous que le modèle est téléchargé
+# Activate the detection of mission pads (specific to DJI Tello Edu)
+tello.enable_mission_pads()
+tello.set_mission_pad_detection_direction(0)  # Set detection direction (0: downward sensor, 1: front camera)
 
-# --- INITIALISATION DES THREADS ---
+# Load the YOLO model for object detection
+model = YOLO("yolov8n.pt")
 
 # Définir un verrou pour synchroniser l'accès aux frames
 frame_lock = threading.Lock()
@@ -34,6 +45,49 @@ frame_lock = threading.Lock()
 # Flag global pour le cooldown
 cooldown = False
 cooldown_time = 10  # Temps en secondes pendant lequel les captures sont ignorées après une détection
+
+
+def add_ar_elements(frame, tello, detections):
+    """
+    Ajoute des éléments de Réalité Augmentée (AR) sur le frame fourni.
+    Inclut les informations de batterie et altitude, une flèche de direction,
+    une zone de suivi, et le nombre d'objets détectés.
+    """
+    # 1. Informations de Batterie et Altitude
+    battery = tello.get_battery()
+    altitude = tello.get_height()
+    cv2.putText(frame, f"Batterie: {battery}%", (10, 30),cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    cv2.putText(frame, f"Altitude: {altitude} cm", (10, 70),cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+    # 2. Flèche de Direction
+    height, width, _ = frame.shape
+    arrow_start = (width // 2, height - 50)
+    arrow_end = (width // 2, height - 150)
+    cv2.arrowedLine(frame, arrow_start, arrow_end, (0, 255, 0), 5)
+    cv2.putText(frame, "Direction", (arrow_end[0] + 10, arrow_end[1]),cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+    # 3. Zone de Suivi
+    center_x, center_y = width // 2, height // 2
+    box_size = 100
+    top_left = (center_x - box_size, center_y - box_size)
+    bottom_right = (center_x + box_size, center_y + box_size)
+    cv2.rectangle(frame, top_left, bottom_right, (255, 0, 0), 2)
+    cv2.putText(frame, "Zone de Suivi", (top_left[0], top_left[1] - 10),cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+
+    # 4. Nombre d'Objets Détectés
+    num_objects = len(detections)
+    cv2.putText(frame, f"Objets détectés: {num_objects}", (10, 110),cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+
+    # 5. Labels pour les Objets Détectés
+    for detection in detections:
+        class_name = detection['class']
+        confidence = detection['confidence']
+        x1, y1, x2, y2 = detection['box']
+        cv2.putText(frame, f"{class_name} {confidence:.2f}", (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+    return frame
 
 def save_photo(frame):
     """
@@ -54,34 +108,48 @@ def cooldown_timer(duration):
     cooldown = False
     print("[Fly Thread] Cooldown désactivé. Prêt à capturer de nouvelles photos.")
 
-# --- FONCTIONS DE VOL & DÉTECTION ---
+
+# --- Flight and Detection Functions ---
 
 def fly_sequence():
     """
-    Gère la séquence de vol du drone et utilise YOLO pour détecter une personne.
-    Si une personne est détectée, capture une photo, effectue un flip à droite et atterrit.
+    Handle the flight sequence of the drone and use YOLO to detect a person.
+    If a person is detected, the drone performs a flip to the right and lands.
     """
     global cooldown
-    print("[Fly Thread] Décollage...")
-    tello.takeoff()  # Décollage du drone
+    print("[Fly Thread] Taking off...")
+    tello.takeoff()  # Drone takes off
 
-    # 1) Avancer jusqu'à détecter le pad #4
+    # 1) Move forward until pad #4 is detected
     while True:
-        pad_id = tello.get_mission_pad_id()  # Récupère l'ID du pad détecté
-        print("Pad ID =", pad_id)  # Affichage pour le débogage
-        if pad_id == 4:
-            print("[Fly Thread] Pad #4 détecté. Arrêt de la progression.")
+        pad_id = tello.get_mission_pad_id()
+        
+        if pad_id == 4:  # Pad #4 detected
+            print("[Fly Thread] Pad #4 detected.")
+            # 2) Rotate 90° clockwise
+            print("[Fly Thread] 90° rotation...")
+            tello.rotate_clockwise(90)
             break
+        elif pad_id == 8:  # Pad #4 detected
+            print("[Fly Thread] Pad #8 detected.")
+            print("[Fly Thread] 180° rotation...")
+            tello.rotate_clockwise(180)
+            time.sleep(1)
+            print("[Fly Thread] Moving 50 cm up...")
+            tello.move_up(50)
+            time.sleep(1)
+            break
+        elif pad_id == -1:
+            print("[Fly Thread] No pad detected. Moving forward...")
         else:
-            print("[Fly Thread] Pas encore de pad #4. J'avance...")
-            tello.move_forward(50)  # Avance de 50 cm
-            time.sleep(1)  # Pause d'une seconde
+            print(f"[Fly Thread] Detected pad ID: {pad_id}. Continuing search...")
 
-    # 2) Tourner de 90° dans le sens horaire
-    print("[Fly Thread] Rotation de 90°...")
-    tello.rotate_clockwise(90)
+        tello.move_forward(50)  # Move forward
+        time.sleep(1)  # Pause for 1 second
 
-    # 3) Boucle pour détecter une personne
+    
+
+    # 3) Detect a person using YOLO
     while True:
         img = frame_read.frame  # Récupère le cadre actuel du flux vidéo
         if img is None:
@@ -118,62 +186,15 @@ def fly_sequence():
                     break  # Sort de la boucle une fois la personne détectée
 
         if person_detected:
-            break  # Quitter la boucle principale pour atterrir
+            break 
 
-    # 4) Atterrissage du drone
-    print("[Fly Thread] Atterrissage...")
+    # 4) Land the drone
+    print("[Fly Thread] Landing...")
     tello.land()
 
-# --- SERVEUR FLASK POUR LE FLUX VIDÉO ---
+# --- Flask Server for the Video Feed ---
 
-app = Flask(__name__)  # Initialisation de l'application Flask
-
-def add_ar_elements(frame, tello, detections):
-    """
-    Ajoute des éléments de Réalité Augmentée (AR) sur le frame fourni.
-    Inclut les informations de batterie et altitude, une flèche de direction,
-    une zone de suivi, et le nombre d'objets détectés.
-    """
-    # 1. Informations de Batterie et Altitude
-    battery = tello.get_battery()
-    altitude = tello.get_height()
-    cv2.putText(frame, f"Batterie: {battery}%", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    cv2.putText(frame, f"Altitude: {altitude} cm", (10, 70),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-
-    # 2. Flèche de Direction
-    height, width, _ = frame.shape
-    arrow_start = (width // 2, height - 50)
-    arrow_end = (width // 2, height - 150)
-    cv2.arrowedLine(frame, arrow_start, arrow_end, (0, 255, 0), 5)
-    cv2.putText(frame, "Direction", (arrow_end[0] + 10, arrow_end[1]),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-    # 3. Zone de Suivi
-    center_x, center_y = width // 2, height // 2
-    box_size = 100
-    top_left = (center_x - box_size, center_y - box_size)
-    bottom_right = (center_x + box_size, center_y + box_size)
-    cv2.rectangle(frame, top_left, bottom_right, (255, 0, 0), 2)
-    cv2.putText(frame, "Zone de Suivi", (top_left[0], top_left[1] - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-
-    # 4. Nombre d'Objets Détectés
-    num_objects = len(detections)
-    cv2.putText(frame, f"Objets détectés: {num_objects}", (10, 110),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-
-    # 5. Labels pour les Objets Détectés
-    for detection in detections:
-        class_name = detection['class']
-        confidence = detection['confidence']
-        x1, y1, x2, y2 = detection['box']
-        cv2.putText(frame, f"{class_name} {confidence:.2f}", (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-    return frame
+app = Flask(__name__)  # Initialize the Flask application
 
 def gen_frames():
     global cooldown
@@ -212,7 +233,7 @@ def gen_frames():
         annotated_frame = add_ar_elements(frame, tello, detections)
 
         # Écriture de la frame annotée dans le fichier vidéo
-        video_writer.write(annotated_frame)
+        # video_writer.write(annotated_frame)
 
         # Conversion de BGR en RGB pour un affichage correct dans le navigateur
         annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
@@ -223,22 +244,26 @@ def gen_frames():
             continue
 
         # Construction du flux MJPEG
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        yield (b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
 
         time.sleep(0.03)  # Pause pour limiter le débit du flux
 
 @app.route('/video_feed')
 def video_feed():
-    return Response(gen_frames(),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+    """
+    Route that exposes the annotated video feed in MJPEG format.
+    """
+    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/')
 def index():
+    """
+    Main HTML page displaying the video feed with simple styling.
+    """
     return '''
     <html>
     <head>
-        <title>Flux vidéo Tello avec Détection</title>
+        <title>Tello Video Feed</title>
         <style>
             body {
                 background-color: #f0f0f0;
@@ -272,25 +297,24 @@ def index():
     </html>
     '''
 
-# --- LANCEMENT DE L'APPLICATION ---
+# --- Launch the Application ---
 
 if __name__ == '__main__':
     try:
-        # Thread 1 : Gestion de la séquence de vol (fly_sequence)
+        # Thread 1: Manage the flight sequence (fly_sequence)
         fly_thread = threading.Thread(target=fly_sequence, daemon=True)
         fly_thread.start()
 
-        # Thread principal : Lancement du serveur Flask
+        # Main thread: Launch the Flask server
         app.run(host='0.0.0.0', port=5000, debug=False)
+
     finally:
-        # Arrêt propre du flux vidéo
+        # Properly stop the video feed
         tello.streamoff()
-        # Libération de VideoWriter
-        video_writer.release()
-        # Tentative d'atterrissage si le drone est encore en vol
+        # Attempt to land the drone if still in flight
         try:
             tello.land()
         except:
             pass
-        # Libération des ressources du drone
+        # Release the drone's resources
         tello.end()
