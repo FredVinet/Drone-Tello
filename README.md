@@ -1,16 +1,10 @@
 # Drone extravaganza
 
-## Main goals
+With this project you'll be able to take your first steps with a programmable drone : set it's course, stream it's view and react to the environment through object recognition.
 
-Stream the drone video  
-Objects recognition with YOLO  
-Interactions with recognized objects
+We used the Ryze Tello EDU drone. 
 
-## Matériel
-
-Drone Ryze Tello EDU
-
-## A installer
+## Dependencies
 
 * python3
 * cv2
@@ -18,12 +12,13 @@ Drone Ryze Tello EDU
 * djitellopy
 * ultralytics
 * time
+* flask
 
 ### Install python
 
     aptitude install python3
 
-**Note : if needed, set up a virtual environment for python (see [usefull links](#usefull-links-))
+**Note : if needed, set up a virtual environment for python (see [Usefull links](#Usefull-links-))
 
 ### Install libs
 
@@ -31,10 +26,13 @@ Drone Ryze Tello EDU
     pip3 install thread6
     pip3 install djitellopy
     pip3 install ultralytics
+    pip3 install flask
 
-### Exemples
+## Run
 
-See .py files for exemples
+Once you've installed everything, you need to connect to the drone through the wifi.
+
+To launch a sequence, just run the desired .py file.
 
 ## Usefull links
 
