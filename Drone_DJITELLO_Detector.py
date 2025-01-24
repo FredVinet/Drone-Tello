@@ -54,11 +54,19 @@ def add_ar_elements(frame, tello, detections):
     """
     # 1. Battery Informations
     battery = tello.get_battery()
-    cv2.putText(frame, f"Battery: {battery}%", (10, 30),cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    cv2.putText(frame, f"Battery: {battery}%", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
     # 2. Number of objects detected
     num_objects = len(detections)
-    cv2.putText(frame, f"Number of Objects: {num_objects}", (10, 110),cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+    cv2.putText(frame, f"Number of Objects: {num_objects}", (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+
+    # 3. Label for the detected object
+    for detection in detections:
+        class_name = detection['class']
+        confidence = detection['confidence']
+        x1, y1, x2, y2 = detection['box']
+        cv2.putText(frame, f"{class_name} {confidence:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
     return frame
 
